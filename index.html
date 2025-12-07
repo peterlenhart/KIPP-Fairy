@@ -247,8 +247,8 @@
     }
 
     .last-two {
-      font-size: 1.2rem;
-      font-weight: 700;
+      font-size: 1.3rem;
+      font-weight: 800;
       letter-spacing: 0.03em;
       white-space: nowrap;
       color: var(--fk-orange);
@@ -377,7 +377,7 @@
       border-radius: 999px;
       border: 1px solid var(--fk-border);
       background: #111;
-      color: var(--fk-text);
+      color: #f5f5f5;
       font-size: 0.8rem;
       min-width: 0;
     }
@@ -420,6 +420,7 @@
   </style>
 </head>
 <body>
+  <!-- API-Key Banner -->
   <div class="apikey-banner" id="apikey-banner">
     <div class="apikey-inner">
       <span>OpenAI&nbsp;API-Key:</span>
@@ -442,7 +443,8 @@
       <div class="tagline">Unendlich viele KIPP-Fabeln</div>
     </header>
 
-    <section class="panel" id="fairy-panel">
+    <!-- Fairy Panel -->
+    <section class="panel">
       <div class="panel-header">
         <span class="pill pill-blue">Fairy</span>
         <span id="fairy-status" class="status-line"></span>
@@ -464,6 +466,7 @@
       </div>
     </section>
 
+    <!-- Punkte Panel -->
     <section class="panel">
       <div class="panel-header">
         <span class="pill pill-violet">Punkte</span>
@@ -484,11 +487,10 @@
       </div>
     </section>
 
-    <button id="reset-btn" class="btn-ghost">
-      Neue Partie
-    </button>
+    <button id="reset-btn" class="btn-ghost">NEUE PARTIE</button>
   </div>
 
+  <!-- End Screen -->
   <div class="end-overlay" id="end-overlay">
     <div class="end-card">
       <div class="end-title">Fairy End</div>
@@ -550,6 +552,7 @@
     let lastStories = [];
     let unusedMotifs = [];
 
+    // --- Storage & Init ---
     function loadApiKeyFromStorage() {
       const stored = window.localStorage.getItem(APIKEY_STORAGE_KEY);
       if (stored && stored.startsWith("sk-")) {
@@ -570,11 +573,7 @@
     function loadLastStories() {
       try {
         const raw = window.localStorage.getItem(LAST_STORIES_KEY);
-        if (raw) {
-          lastStories = JSON.parse(raw);
-        } else {
-          lastStories = [];
-        }
+        lastStories = raw ? JSON.parse(raw) : [];
       } catch (e) {
         lastStories = [];
       }
@@ -604,6 +603,20 @@
         sentenceIndicator.textContent = "";
         return;
       }
+
+      // 3 Schritte: Satz1, Satz2, Motiv
+      if (currentParts.length === 3) {
+        if (currentPartIndex === 0) {
+          sentenceIndicator.textContent = "Satz 1 von 2";
+        } else if (currentPartIndex === 1) {
+          sentenceIndicator.textContent = "Satz 2 von 2";
+        } else {
+          sentenceIndicator.textContent = "Motiv";
+        }
+        return;
+      }
+
+      // Fallback (1 oder 2 Teile)
       sentenceIndicator.textContent =
         "Satz " + (currentPartIndex + 1) + " von " + currentParts.length;
     }
@@ -633,6 +646,19 @@
       return highlighted;
     }
 
+    function extractLastTwoWordsSentence(sentence) {
+      const text = sentence.trim();
+      const endPunctMatch = text.match(/[.!?]$/);
+      const endPunct = endPunctMatch ? endPunctMatch[0] : "";
+      const core = endPunct ? text.slice(0, -1).trim() : text;
+      const parts = core.split(/\s+/);
+      if (parts.length <= 2) {
+        return core + endPunct;
+      }
+      const lastTwo = parts.slice(-2).join(" ");
+      return lastTwo + endPunct;
+    }
+
     function showStoryPart(index) {
       if (!currentFairyText || currentParts.length === 0) return;
       if (index < 0 || index >= currentParts.length) return;
@@ -642,13 +668,24 @@
 
       const text = currentParts[index];
 
-      if (currentParts.length === 2 && index === 1) {
+      if (currentParts.length === 3) {
+        if (index === 0) {
+          // Satz 1
+          storyTextEl.textContent = text;
+        } else if (index === 1) {
+          // Satz 2 komplett, letzte zwei hervorgehoben
+          storyTextEl.innerHTML = highlightLastTwoWords(text);
+        } else {
+          // Nur letzte zwei Wörter (Motiv) groß
+          storyTextEl.innerHTML = highlightLastTwoWords(text);
+        }
+      } else if (currentParts.length === 2 && index === 1) {
         storyTextEl.innerHTML = highlightLastTwoWords(text);
       } else {
         storyTextEl.textContent = text;
       }
 
-      if (currentParts.length > 1 && index < currentParts.length - 1) {
+      if (index < currentParts.length - 1) {
         nextPartBtn.classList.remove("hidden");
       } else {
         nextPartBtn.classList.add("hidden");
@@ -663,7 +700,12 @@
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      if (sentences.length === 2) return sentences;
+      if (sentences.length === 2) {
+        const lastTwoSentence = extractLastTwoWordsSentence(sentences[1]);
+        return [sentences[0], sentences[1], lastTwoSentence];
+      }
+
+      // Fallback
       return [text];
     }
 
@@ -721,7 +763,7 @@
       endOverlay.style.display = "none";
     }
 
-    // --- Validierung, ob Text wirklich zum Motiv passt ---
+    // --- Validierung für Motiv ---
     function validateStoryForMotif(text, motif) {
       const sentences = text
         .split(/(?<=[.!?])\s+/)
@@ -731,17 +773,12 @@
       if (sentences.length !== 2) return false;
 
       const second = sentences[1];
-
-      // letztes Wort des ganzen Textes
       const lastMatch = second.match(/([A-Za-zÄÖÜäöüß\-]+)[.!?"]*\s*$/);
       if (!lastMatch) return false;
       const lastWord = lastMatch[1];
 
-      if (lastWord.toLowerCase() !== motif.toLowerCase()) {
-        return false;
-      }
+      if (lastWord.toLowerCase() !== motif.toLowerCase()) return false;
 
-      // Motiv darf insgesamt nur einmal vorkommen
       const lower = text.toLowerCase();
       const re = new RegExp("\\b" + motif.toLowerCase() + "\\b", "g");
       let count = 0;
@@ -751,12 +788,11 @@
       return true;
     }
 
-    // Fallback-Text, falls die KI dreimal patzt
     function buildFallbackMotifStory(motif) {
       const first =
         "Auf dem Tisch wartete etwas still auf seinen Einsatz im Spiel heute.";
       const second =
-        "Jetzt bin ich endlich an der Reihe heute doch, murmelte das " + motif + ".";
+        "\"Jetzt bin ich endlich an der Reihe\", murmelte das " + motif + ".";
       return first + " " + second;
     }
 
@@ -836,17 +872,11 @@
           throw new Error("HTTP-Fehler: " + response.status);
         }
 
+        const data = await response.json();
         let text =
-          response?.ok && (await response.json()).choices?.[0]?.message?.content?.trim();
+          data.choices?.[0]?.message?.content?.trim() ||
+          buildFallbackMotifStory(motif);
 
-        if (!text) {
-          text =
-            "Ein kleiner Fehler huschte durch den Text. \"Jetzt funktioniere ich wieder\", murmelte das " +
-            motif +
-            ".";
-        }
-
-        // Validierung + Wiederholungs-Check
         const isValid = validateStoryForMotif(text, motif);
         if ((!isValid || storyAlreadySeen(text)) && retryCount < 3) {
           return await generateFairyFromOpenAI(retryCount + 1);
@@ -877,6 +907,7 @@
       }
     }
 
+    // --- Events ---
     fairyBtn.addEventListener("click", async () => {
       await generateFairyFromOpenAI();
     });
