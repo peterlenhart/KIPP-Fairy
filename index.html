@@ -522,10 +522,26 @@
       "T-Shirt"
     ];
 
-    // gemeinsame Verben, immer erlaubt:
+    // Artikel für Fallback
+    const motifArticles = {
+      Wasserball: "der",
+      Auto: "das",
+      Farbfleck: "der",
+      Buch: "das",
+      Gießkanne: "die",
+      Kerze: "die",
+      Blume: "die",
+      Fisch: "der",
+      Schmetterling: "der",
+      Schuh: "der",
+      Tasse: "die",
+      "T-Shirt": "das"
+    };
+
+    // gemeinsame Verben
     const commonVerbs = ["sagte", "meinte", "dachte"];
 
-    // Motiv-spezifische Verben (alle ohne Adverbien, bereinigt)
+    // Motiv-spezifische Verben (bereinigt)
     const motifBaseVerbs = {
       Wasserball: [
         "platschte",
@@ -806,7 +822,6 @@
       const text = currentParts[index];
 
       if (currentParts.length === 3 && index === 2) {
-        // Motiv alleine groß darstellen
         storyTextEl.innerHTML = '<span class="motif-big">' + text + "</span>";
       } else {
         storyTextEl.textContent = text;
@@ -827,7 +842,7 @@
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      if (sentences.length !== 2) {
+      if (sentences.length < 2) {
         return [text];
       }
 
@@ -848,35 +863,21 @@
       return [first, secondWithoutMotif, motifOnly];
     }
 
-    function countWords(sentence) {
-      const cleaned = sentence
-        .replace(/[.,!?"]/g, " ")
-        .trim();
-      if (!cleaned) return 0;
-      return cleaned.split(/\s+/).length;
-    }
-
     function validateStoryForMotif(text, motif) {
       const sentences = text
         .split(/(?<=[.!?])\s+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      if (sentences.length !== 2) return false;
+      if (sentences.length < 2) return false;
 
       const first = sentences[0];
       const second = sentences[1];
 
-      // Wortanzahl prüfen
-      const w1 = countWords(first);
-      const w2 = countWords(second);
-      if (w1 < 12 || w1 > 16) return false;
-      if (w2 < 12 || w2 > 16) return false;
-
       const motifEsc = escapeRegex(motif);
       const motifRegex = new RegExp(motifEsc, "gi");
 
-      // Motiv muss genau 1x vorkommen, im 2. Satz
+      // Motiv genau 1x insgesamt
       let count = 0;
       let m;
       while ((m = motifRegex.exec(text)) !== null) {
@@ -884,19 +885,17 @@
       }
       if (count !== 1) return false;
 
+      // Motiv nur im zweiten Satz
       if (new RegExp(motifEsc, "i").test(first)) return false;
       if (!new RegExp(motifEsc, "i").test(second)) return false;
 
-      // 2. Satz: "..." , VERB der/die/das MOTIV.
-      const pattern = '^"[^"]+"\\s*,\\s*([A-Za-zÄÖÜäöüß]+)\\s+(der|die|das)\\s+' + motifEsc + '[.!?"]*\\s*$';
+      // 2. Satz: "..." , Verb der/die/das MOTIV.
+      const pattern =
+        '^"[^"]+"\\s*,\\s*([A-Za-zÄÖÜäöüß]+)\\s+(der|die|das)\\s+' +
+        motifEsc +
+        '[.!?"]*\\s*$';
       const re = new RegExp(pattern, "i");
-      const match = second.match(re);
-      if (!match) return false;
-
-      const verb = match[1].toLowerCase();
-      const allowed = getAllowedVerbsForMotif(motif)
-        .map((v) => v.toLowerCase());
-      if (!allowed.includes(verb)) return false;
+      if (!re.test(second)) return false;
 
       return true;
     }
@@ -947,7 +946,6 @@
       sentenceIndicator.textContent = "";
 
       const motif = chooseMotifNoImmediateRepeat();
-
       const allowedVerbs = getAllowedVerbsForMotif(motif);
       const allowedVerbList = allowedVerbs.join(", ");
 
@@ -955,37 +953,32 @@
         role: "system",
         content:
           "Du schreibst sehr kurze Fabeltexte auf Deutsch für ein Gesellschaftsspiel.\n" +
-          "Du MUSST alle folgenden Regeln strikt einhalten:\n" +
-          "- Der Text besteht aus genau 2 Sätzen.\n" +
-          "- Jeder Satz hat zwischen 12 und 16 Wörtern.\n" +
-          "- Der Text enthält KEINE Farbwörter.\n" +
-          "- Kein Genitiv. Verwende nur Nominativ, Akkusativ oder Dativ.\n" +
+          "WICHTIG – halte diese Regeln so gut wie möglich ein:\n" +
+          "- Schreibe GENAU 2 Sätze.\n" +
+          "- Ziel: ungefähr 12–16 Wörter pro Satz.\n" +
+          "- Keine Farbwörter.\n" +
+          "- Kein Genitiv, nur Nominativ, Akkusativ oder Dativ.\n" +
           "- Keine direkte Anrede mit 'du' oder 'ihr'.\n" +
-          "- Keine Märchensprache und kein Kitsch; nüchterne, einfache Fabelsprache.\n" +
+          "- Keine Märchensprache, sondern einfache, neutrale Fabelsprache.\n" +
           "Struktur:\n" +
-          "- Satz 1: neutrale Beobachtungsszene in der dritten Person, keine Personifikation im grammatikalischen Sinne, enthält das Motivwort nicht und keine Ableitung davon.\n" +
-          "- Satz 2: besteht IMMER aus direkter Rede, gefolgt von einem Redebegleitsatz.\n" +
-          "  Die Struktur von Satz 2 ist IMMER: \"<Direkte Rede>\", <Verb> der/die/das <Motiv>.\n" +
-          "Vorgaben zum Motivwort:\n" +
-          "- Das Motivwort kommt im gesamten Text nur EINMAL vor.\n" +
-          "- Es steht IMMER als letztes Wort des zweiten Satzes.\n" +
-          "Redebegleitsatz:\n" +
-          "- Das Verb muss eines aus dieser Liste sein: " +
+          "- Satz 1: neutrale Beobachtungsszene in der dritten Person, enthält das Motivwort nicht.\n" +
+          "- Satz 2: besteht IMMER aus direkter Rede mit folgendem Muster:\n" +
+          '  \"<Direkte Rede>\", <Verb> der/die/das <Motiv>.\n' +
+          "- Das Motivwort kommt im gesamten Text nur EINMAL vor, als letztes Wort des zweiten Satzes.\n" +
+          "Das Verb im zweiten Satz soll möglichst aus dieser Liste stammen: " +
           allowedVerbList +
-          ".\n" +
-          "- Keine Pronomen wie 'er', 'sie', 'es' im Redebegleitsatz.\n" +
-          "- Kein weiteres Objekt oder Nebensatz nach dem Motivwort."
+          ", ansonsten ein neutrales Verb wie sagte/meinte/dachte."
       };
 
       const userMessage = {
         role: "user",
         content:
-          "Schreibe einen zweisätzigen Fabeltext nach den Systemregeln.\n" +
+          "Schreibe eine zweisätzige Fabel nach den Systemregeln.\n" +
           "Verwende als Motiv genau dieses Wort: \"" +
           motif +
           "\".\n" +
-          "Das Motivwort darf im gesamten Text nur ein einziges Mal vorkommen und muss das letzte Wort des Textes sein.\n" +
-          "Der zweite Satz muss exakt der Struktur \"Direkte Rede, Verb, bestimmter Artikel, Motiv\" folgen."
+          "Das Motivwort darf im gesamten Text nur einmal vorkommen und muss das letzte Wort des zweiten Satzes sein.\n" +
+          "Der zweite Satz muss die Struktur \"Direkte Rede, Verb, bestimmter Artikel, Motiv\" haben."
       };
 
       try {
@@ -1019,10 +1012,17 @@
         }
 
         if (!isValid && retryCount >= 3) {
-          // sehr einfacher Fallback, garantiert gültige Struktur
+          // sehr einfacher Fallback, jetzt mit Artikel + lautlichem Verb
+          const art = motifArticles[motif] || "das";
+          const verbs = getAllowedVerbsForMotif(motif);
+          const v = verbs[Math.floor(Math.random() * verbs.length)] || "sagte";
           text =
-            'Am Spielfeldrand wartete etwas Ungeduldiges auf seinen Einsatz im Spiel heute.' +
-            ' "Jetzt bin ich an der Reihe", sagte das ' +
+            "Am Spielfeldrand wartete etwas Ungeduldiges auf seinen Einsatz im Spiel heute." +
+            ' "Jetzt bin ich an der Reihe", ' +
+            v +
+            " " +
+            art +
+            " " +
             motif +
             ".";
         }
