@@ -250,14 +250,18 @@
       color: var(--fk-violet);
     }
 
+    /* Motiv – letzte Ausgabe, eine Zeile */
     .motif-big {
       width: 100%;
       text-align: center;
-      font-size: 2.4rem;
+      font-size: clamp(1.4rem, 8vw, 2rem);
       font-weight: 800;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
-      margin-top: 6px;
+      margin-top: 4px;
+      line-height: 1.1;
+      white-space: nowrap;   /* keine zweite Zeile */
+      padding: 0 4px;
     }
 
     /* Scoreboard */
@@ -554,6 +558,8 @@
       "T-Shirt": ["raschelte", "flatterte", "seufzte", "wisperte", "knisterte", "murmelte", "hauchte", "säuselte"]
     };
 
+    const pronounByArticle = { der: "er", die: "sie", das: "es" };
+
     // -----------------------------
     // Zustände & Speicher
     // -----------------------------
@@ -782,7 +788,6 @@
 
     function validateAndBuildParts(text, motifObj, verb) {
       const noun = motifObj.noun;
-      const fullMotif = motifObj.full;
 
       const sentences = splitIntoSentences(text);
       if (sentences.length < 2) {
@@ -804,18 +809,15 @@
         return null;
       }
 
-      // 2. Satz: wir erwarten wörtliche Rede, aber sind flexibel
-      // Wenn ein Punkt vor schließenden Anführungszeichen ist, entfernen wir ihn.
-      s2 = s2.replace(/([.!?])(".*)$/g, '$2'); // z.B. "Hallo." -> "Hallo"
+      // Satz 2: nur Rede, evtl. mit Punkt vor dem Anführungszeichen -> entfernen
+      s2 = s2.replace(/([.!?])(".*)$/g, '$2').trim();
 
-      // Wenn keine Anführungszeichen vorhanden sind, akzeptieren wir es trotzdem
-      // und behandeln den ganzen Satz als "gesprochene" Phrase.
-      s2 = s2.trim();
+      // Pronomen für Sprecheranhang
+      const pronoun = pronounByArticle[motifObj.article] || "es";
 
-      // Wir hängen Verb + Artikel an, Motiv erst beim dritten Schritt
-      const article = motifObj.article;
+      // Zweite Anzeige: Rede + Verb + Pronomen, OHNE Punkt am Ende
       const secondDisplay =
-        s2.replace(/\s+$/, "") + ", " + verb + " " + article + ".";
+        s2.replace(/\s+$/, "") + ", " + verb + " " + pronoun;
 
       const motifDisplay = noun.toUpperCase();
 
@@ -918,14 +920,14 @@
 
         if (!parts && retryCount >= 3) {
           // Fallback – ganz einfache Not-Fabel, aber regelkonform
+          const pronoun = pronounByArticle[motifObj.article] || "es";
           const fallbackS1 =
             "Am Spielfeldrand wartete etwas Ungeduldiges darauf, endlich ins Geschehen zu kippen.";
           const fallbackS2 =
             "\"Jetzt bin ich an der Reihe\", " +
             verb +
             " " +
-            motifObj.article +
-            ".";
+            pronoun;
           const fallbackMotif = motifObj.noun.toUpperCase();
           currentParts = [fallbackS1, fallbackS2, fallbackMotif];
           currentFairyOwnedByThisDevice = true;
