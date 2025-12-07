@@ -215,25 +215,34 @@
       background: rgba(170, 0, 120, 0.1);
     }
 
+    /* GEDICHT-ARTIGE FABEL-ANZEIGE */
     .story-box {
       min-height: 130px;
       max-height: 210px;
       border-radius: 10px;
       border: 1px solid var(--fk-border);
-      padding: 10px 11px;
-      font-size: 1.05rem;
-      line-height: 1.55;
+      padding: 12px 16px;
+      font-size: 1.35rem;
+      line-height: 1.7;
       background: radial-gradient(circle at top left, #252525 0, #111 55%);
       display: flex;
+      justify-content: center;
       align-items: flex-start;
-      justify-content: flex-start;
       overflow-y: auto;
+      text-align: center;
+    }
+
+    #story-text {
+      width: 100%;
+      white-space: pre-wrap;   /* damit \n\n\n sichtbar werden */
+      font-weight: 600;
     }
 
     .story-muted {
       color: var(--fk-muted);
       font-style: italic;
       font-size: 0.95rem;
+      font-weight: 400;
     }
 
     .story-footer {
@@ -248,19 +257,6 @@
 
     .sentence-indicator {
       color: var(--fk-violet);
-    }
-
-    .motif-big {
-      width: 100%;
-      text-align: center;
-      font-size: clamp(1.6rem, 9vw, 2.3rem);
-      font-weight: 800;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-top: 4px;
-      line-height: 1.1;
-      white-space: nowrap;
-      display: block;
     }
 
     .score-row {
@@ -455,6 +451,7 @@
 
       <div class="button-row">
         <button id="fairy-btn" class="btn-main">FAIRY</button>
+        <!-- MOTIV-Button NICHT MEHR VERWENDET, ABER GELASSEN DAMIT NICHTS BRICHT -->
         <button id="reveal-motif-btn" class="btn-small hidden">MOTIV</button>
       </div>
 
@@ -579,7 +576,7 @@
     // UI-Elemente
     // -----------------------------
     const fairyBtn = document.getElementById("fairy-btn");
-    const revealMotifBtn = document.getElementById("reveal-motif-btn");
+    const revealMotifBtn = document.getElementById("reveal-motif-btn"); // bleibt versteckt
     const fairyStatus = document.getElementById("fairy-status");
     const storyTextEl = document.getElementById("story-text");
     const sentenceIndicator = document.getElementById("sentence-indicator");
@@ -647,28 +644,6 @@
       endOverlay.style.display = "flex";
     }
 
-    function escapeHTML(str) {
-      return str
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-    }
-
-    function buildStoryHTML(mainText, motifUpper) {
-      const safeMain = escapeHTML(mainText);
-      const safeMotif = escapeHTML(motifUpper);
-      // Zwei, drei Zeilen Abstand, dann das Motiv groß
-      return (
-        safeMain +
-        "<br><br><br>" +
-        '<span class="motif-big">' +
-        safeMotif +
-        "</span>"
-      );
-    }
-
     function resetGameState() {
       score = 0;
       narratedFairies = 0;
@@ -681,9 +656,6 @@
       storyTextEl.textContent =
         "Tippe auf FAIRY, um eine neue Fabel zu starten.";
       storyTextEl.classList.add("story-muted");
-      storyTextEl.classList.remove("motif-big");
-      storyTextEl.style.whiteSpace = "normal";
-      revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
 
@@ -740,7 +712,7 @@
       apikeyBanner.classList.add("hidden");
     }
 
-    // KI-Text aufsplitten: letztes Wort = Motiv
+    // KI-Text aufsplitten: letztes Wort = Motiv (mit Verb + Artikel davor)
     function splitTextAndMotif(fullText, motifObj, verb) {
       if (!fullText) return null;
 
@@ -757,20 +729,17 @@
       if (
         motifCandidate.toLowerCase() !== motifObj.noun.toLowerCase()
       ) {
-        // passt nicht zu unserem Motiv → ablehnen
         return null;
       }
 
-      // Sicherheit: dritt- und zweitletztes Wort prüfen (Verb + Artikel)
+      // zweit- und drittletztes Wort prüfen (Artikel + Verb)
       let secondLastRaw = tokens[tokens.length - 2];
       let thirdLastRaw = tokens[tokens.length - 3];
 
       let secondLast = secondLastRaw.replace(/[.,!?;"“”„]+$/g, "").toLowerCase();
       let thirdLast = thirdLastRaw.replace(/[.,!?;"“”„]+$/g, "").toLowerCase();
 
-      if (
-        secondLast !== motifObj.article.toLowerCase()
-      ) {
+      if (secondLast !== motifObj.article.toLowerCase()) {
         return null;
       }
 
@@ -779,7 +748,6 @@
         .map((v) => v.toLowerCase());
 
       if (!allowedVerbs.includes(thirdLast)) {
-        // Verb entspricht nicht unserem Pool
         return null;
       }
 
@@ -793,7 +761,7 @@
         }
       }
 
-      // Jetzt nur das letzte Wort (Motiv) abzwicken:
+      // Nur das letzte Wort (Motiv) abzwicken:
       const mainTokens = tokens.slice(0, -1);
       const mainText = mainTokens.join(" ");
 
@@ -821,9 +789,6 @@
       setFairyStatus("Fairy wird gezaubert …");
       storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
       storyTextEl.classList.add("story-muted");
-      storyTextEl.classList.remove("motif-big");
-      storyTextEl.style.whiteSpace = "normal";
-      revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
 
       // 1. Random Motiv + Artikel
@@ -846,8 +811,7 @@
           "- Keine Farbwörter (blau, grün, orange, violett usw.).\n" +
           "- Verwende das Motivwort nur in der Schlussphrase, die ich dir nenne.\n" +
           "- Kein Genitiv.\n" +
-          "- Kein 'sagte', 'meinte', 'dachte'.\n" +
-          "- Verwende deutsche Zeichensetzung bei wörtlicher Rede: „…“, murmelte die Tasse.\n"
+          "- Kein 'sagte', 'meinte', 'dachte'.\n"
       };
 
       const userMessage = {
@@ -893,8 +857,9 @@
         const data = await response.json();
         let text = data.choices?.[0]?.message?.content?.trim() || "";
 
-        // Englische Zeichensetzung „,…“ → deutsches „…“, …
-        text = text.replace(/,"\s*/g, '", ');
+        // Korrektur: Anführungszeichen + Beistrich + Leerzeichen
+        // z.B. „...“,flüsterte -> „...“, flüsterte
+        text = text.replace(/([„”"])\s*,\s*/g, '$1, ');
 
         const result = splitTextAndMotif(text, motifObj, verb);
 
@@ -906,19 +871,15 @@
           // Fallback: einfache Not-Fabel, damit die App nicht hängen bleibt
           const fallbackMain =
             "Etwas Unbenanntes wartete geduldig am Rand des Spielfelds. " +
-            "\"Jetzt kommt mein Moment\", murmelte die.";
+            "\"Jetzt kommt mein Moment\", murmelte das";
+          const fallbackMotif = motifObj.noun.toUpperCase();
+
           currentStoryText = fallbackMain;
-          currentMotifDisplay = motifObj.noun.toUpperCase();
+          currentMotifDisplay = fallbackMotif;
           currentFairyOwnedByThisDevice = true;
 
           storyTextEl.classList.remove("story-muted");
-          storyTextEl.classList.remove("motif-big");
-          storyTextEl.style.whiteSpace = "normal";
-          storyTextEl.innerHTML = buildStoryHTML(
-            currentStoryText,
-            currentMotifDisplay
-          );
-          sentenceIndicator.textContent = "";
+          storyTextEl.textContent = fallbackMain + "\n\n\n" + fallbackMotif;
           setFairyStatus("Neue Fabel ist aktiv (Fallback).");
           return;
         }
@@ -928,12 +889,8 @@
         currentFairyOwnedByThisDevice = true;
 
         storyTextEl.classList.remove("story-muted");
-        storyTextEl.classList.remove("motif-big");
-        storyTextEl.style.whiteSpace = "normal";
-        storyTextEl.innerHTML = buildStoryHTML(
-          currentStoryText,
-          currentMotifDisplay
-        );
+        // Text + kleine „Scrollstrecke“ + Motiv
+        storyTextEl.textContent = currentStoryText + "\n\n\n" + currentMotifDisplay;
         sentenceIndicator.textContent = "";
         setFairyStatus("Neue Fabel ist aktiv.");
       } catch (err) {
@@ -955,8 +912,8 @@
       await generateFairyFromOpenAI();
     });
 
-    // MOTIV-Button wird nicht mehr verwendet, bleibt aber unsichtbar
-    // revealMotifBtn.addEventListener(...) entfällt absichtlich
+    // MOTIV-Button bleibt versteckt und ohne Funktion
+    revealMotifBtn.classList.add("hidden");
 
     fairyFundBtn.addEventListener("click", () => {
       if (!currentStoryText && !currentMotifDisplay) {
@@ -986,9 +943,6 @@
       storyTextEl.textContent =
         "Fabel verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
       storyTextEl.classList.add("story-muted");
-      storyTextEl.classList.remove("motif-big");
-      storyTextEl.style.whiteSpace = "normal";
-      revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
 
