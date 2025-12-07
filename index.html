@@ -264,7 +264,7 @@
       text-transform: uppercase;
       margin-top: 4px;
       line-height: 1.1;
-      white-space: nowrap; /* Standard: kein Umbruch */
+      white-space: nowrap; /* kein Umbruch, außer beim Schmetterling per JS */
     }
 
     /* Scoreboard */
@@ -536,7 +536,7 @@
       { full: "das T-Shirt", article: "das", noun: "T-Shirt", key: "T-Shirt" }
     ];
 
-    // Motiv-spezifische Lautverben (bereinigt, wie gemeinsam festgelegt)
+    // Lautverben pro Motiv – bereinigt wie vereinbart
     const motifVerbBase = {
       Wasserball: ["platschte", "plumpste", "spritzte", "hüpfte", "polterte", "ploppte"],
       Auto: ["brummte", "knatterte", "röhrte", "tuckerte", "schnurrte", "hupte", "quietschte", "dröhnte", "heulte", "fauchte"],
@@ -725,43 +725,53 @@
       endOverlay.style.display = "flex";
     }
 
-    function splitIntoSentences(text) {
-      return text
-        .split(/(?<=[.!?])\s+/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    }
-
-    // Validierung:
-    // - genau 2 Sätze
-    // - kein Motivwort im Text
-    // - keine Farbwörter
-    // Gibt zurück:
-    // { storyText: "Satz1\n\nSatz2", motifDisplay: "SCHMETTERLING" }
-    function validateAndBuildStory(text, motifObj) {
+    // text: Rückgabe von OpenAI (2 Zeilen)
+    // baut endgültigen 2-Satz-Text:
+    // Satz1 = Zeile1
+    // Satz2 = "Zeile2", VERB ARTIKEL NOMEN.
+    function buildStoryFromLines(rawText, motifObj, verb) {
       const noun = motifObj.noun;
+      const article = motifObj.article;
 
-      const sentences = splitIntoSentences(text);
-      if (sentences.length !== 2) {
+      const lines = rawText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      if (lines.length !== 2) {
         return null;
       }
 
-      const full = sentences.join(" ");
+      const line1 = lines[0];
+      let spoken = lines[1];
 
-      // Motiv darf nicht im Text vorkommen
       const motifRegex = new RegExp("\\b" + noun + "\\b", "i");
-      if (motifRegex.test(full)) {
-        return null;
-      }
-
-      // Farben vermeiden (blau, grün, orange, violett)
       const colorRegex = /\b(blau|grün|orange|violett)\b/i;
-      if (colorRegex.test(full)) {
+      const forbidSimple = /\b(sagte|meinte|dachte)\b/i;
+
+      for (const l of lines) {
+        if (motifRegex.test(l)) return null;
+        if (colorRegex.test(l)) return null;
+        if (forbidSimple.test(l)) return null;
+      }
+
+      // Wortanzahl grob prüfen
+      const totalWords = (line1 + " " + spoken)
+        .split(/\s+/)
+        .filter(Boolean).length;
+      if (totalWords < 16 || totalWords > 30) {
+        // nicht zu streng, aber kleine Schranke
         return null;
       }
 
-      const storyText = sentences[0] + "\n\n" + sentences[1];
-      const motifDisplay = motifObj.noun.toUpperCase();
+      // Anführungszeichen aus spoken entfernen, falls vorhanden
+      spoken = spoken.replace(/^["“”]+/, "").replace(/["“”]+$/, "");
+
+      const secondSentence =
+        '"' + spoken + '", ' + verb + " " + article + " " + noun + ".";
+
+      const storyText = line1 + "\n\n" + secondSentence;
+      const motifDisplay = noun.toUpperCase();
 
       return { storyText, motifDisplay };
     }
@@ -789,7 +799,7 @@
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
 
-      // Motiv & Verb wählen (mit Verbrauchspool)
+      // Motiv & Verb wählen
       const motifObj = chooseMotifNoImmediateRepeat();
       const verb = chooseVerbForMotif(motifObj.noun);
       currentMotif = motifObj;
@@ -799,31 +809,30 @@
         role: "system",
         content:
           "Du schreibst sehr kurze Fabeltexte auf Deutsch für ein Gesellschaftsspiel.\n" +
+          "Du musst GENAU zwei Zeilen liefern:\n" +
+          "Zeile 1: ein vollständiger Erzählsatz in der dritten Person.\n" +
+          "Zeile 2: nur der gesprochene Satz, OHNE Anführungszeichen, OHNE Nachsatz wie 'sagte er', OHNE Verb-Kommentar.\n" +
           "Regeln:\n" +
-          "- Schreibe GENAU 2 Sätze.\n" +
-          "- Beide Sätze zusammen sollen ungefähr 20 bis 26 Wörter haben.\n" +
+          "- Verwende das Motivwort selbst nicht.\n" +
           "- Keine Farbwörter wie blau, grün, orange, violett.\n" +
-          "- Kein Genitiv (kein 'des X'), nur Nominativ, Akkusativ oder Dativ.\n" +
-          "- Keine direkte Anrede mit 'du' oder 'ihr'.\n" +
-          "- Keine märchenhafte Kitsch-Sprache, sondern einfache, neutrale Fabelsprache.\n" +
-          "- Verwende das Motivwort nicht; es bleibt im Hintergrund.\n"
+          "- Kein Genitiv (kein 'des X').\n" +
+          "- Keine Wörter wie 'sagte', 'meinte', 'dachte'.\n" +
+          "- Insgesamt (Zeile 1 + Zeile 2) etwa 18 bis 26 Wörter.\n" +
+          "- Stil: ruhig, klar, kleine Fabel, nicht kitschig.\n"
       };
 
       const userMessage = {
         role: "user",
         content:
-          "Stelle dir vor, die unsichtbare Hauptfigur dieser Fabel ist: \"" +
+          "Die unsichtbare Hauptfigur dieser Fabel ist: \"" +
           motifObj.noun +
           "\".\n" +
-          "Schreibe genau 2 Sätze mit insgesamt etwa 20 bis 26 Wörtern.\n" +
-          "Satz 1: neutrale Beobachtungsszene in der dritten Person, ohne das Wort \"" +
+          "Schreibe GENAU zwei Zeilen:\n" +
+          "1) Zeile 1: ein Erzählsatz in der dritten Person, ungefähr 10–16 Wörter, ohne das Wort \"" +
           motifObj.noun +
-          "\" und ohne Hinweise auf Farben.\n" +
-          "Satz 2: ebenfalls in der dritten Person oder als Erzähler, ohne das Wort \"" +
-          motifObj.noun +
-          "\" und ohne Farben.\n" +
-          "Stil: ruhig, klar, leicht fabelhaft, aber nicht kitschig.\n" +
-          "Gib nur diese zwei Sätze zurück, sonst nichts."
+          "\" und ohne Farbwörter.\n" +
+          "2) Zeile 2: nur der gesprochene Satz (ohne Anführungszeichen, ohne Nachsatz), ungefähr 6–10 Wörter, ebenfalls ohne Motivwort und ohne Farben.\n" +
+          "Gib ausschließlich diese zwei Zeilen aus, jeweils in einer eigenen Zeile."
       };
 
       try {
@@ -847,21 +856,32 @@
 
         const data = await response.json();
         let text =
-          data.choices?.[0]?.message?.content?.trim() ||
-          "Heute blieb alles still, die Fairy konnte nicht geladen werden.";
+          data.choices?.[0]?.message?.content?.trim() || "";
 
-        const result = validateAndBuildStory(text, motifObj);
+        const result = buildStoryFromLines(text, motifObj, verb);
 
-        // Im Fehlerfall oder bei Wiederholung: bis zu 3 Versuche
         if ((!result || storyAlreadySeen(text)) && retryCount < 3) {
           return await generateFairyFromOpenAI(retryCount + 1);
         }
 
         if (!result && retryCount >= 3) {
-          // Fallback – einfache Not-Fabel
-          const fallbackStory =
-            "Am Spielfeldrand wartete etwas Ungeduldiges darauf, endlich ins Geschehen zu kippen.\n\n" +
-            "Niemand wusste, dass es längst seinen eigenen Moment vorbereitete.";
+          // Fallback
+          const line1 =
+            "Am Spielfeldrand wartete etwas Ungeduldiges darauf, endlich ins Geschehen zu kippen.";
+          const spoken =
+            "Jetzt wird es Zeit, meinen Moment zu nutzen";
+          const fallbackSecond =
+            '"' +
+            spoken +
+            '", ' +
+            verb +
+            " " +
+            motifObj.article +
+            " " +
+            motifObj.noun +
+            ".";
+          const fallbackStory = line1 + "\n\n" + fallbackSecond;
+
           currentStoryText = fallbackStory;
           currentMotifDisplay = motifObj.noun.toUpperCase();
           currentFairyOwnedByThisDevice = true;
@@ -881,7 +901,7 @@
         currentMotifDisplay = result.motifDisplay;
         currentFairyOwnedByThisDevice = true;
 
-        rememberStory(text);
+        rememberStory(currentStoryText);
 
         storyTextEl.classList.remove("story-muted");
         storyTextEl.classList.remove("motif-big");
@@ -916,15 +936,14 @@
       storyTextEl.classList.add("motif-big");
       storyTextEl.textContent = currentMotifDisplay;
 
-      // Standard: kein Umbruch, außer beim Schmetterling
       if (
         currentMotif &&
         currentMotif.noun &&
         currentMotif.noun.toLowerCase() === "schmetterling"
       ) {
-        storyTextEl.style.whiteSpace = "normal";
+        storyTextEl.style.whiteSpace = "normal"; // Umbruch erlaubt
       } else {
-        storyTextEl.style.whiteSpace = "nowrap";
+        storyTextEl.style.whiteSpace = "nowrap"; // alle anderen ohne Umbruch
       }
     });
 
