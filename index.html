@@ -255,9 +255,14 @@
       color: var(--fk-violet);
     }
 
-    .color-highlight {
-      color: var(--fk-green);
-      font-weight: 600;
+    /* Hervorhebung der letzten zwei Wörter */
+
+    .last-two {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      white-space: nowrap;
+      color: var(--fk-orange);
     }
 
     /* Scoreboard */
@@ -452,7 +457,7 @@
         <span class="logo-fairy">Fairy</span>
         <span class="logo-kipp">KIPP</span>
       </div>
-      <div class="tagline">Unendlich viele KIPP-Geschichten</div>
+      <div class="tagline">Unendlich viele KIPP-Fabeln</div>
     </header>
 
     <!-- Fairy Generator Panel -->
@@ -468,7 +473,7 @@
 
       <div class="story-box">
         <div id="story-text" class="story-muted">
-          Tippe auf <strong>FAIRY</strong>, um eine neue Geschichte zu starten.
+          Tippe auf <strong>FAIRY</strong>, um eine neue Fabel zu starten.
         </div>
       </div>
 
@@ -510,9 +515,7 @@
       <div class="end-title">Fairy End</div>
       <div class="end-score-label">Deine Fairy-Punkte</div>
       <div class="end-score-value" id="end-score-value">0</div>
-      <div class="end-sub" id="end-sub">
-        Danke fürs KIPPEN, LAUSCHEN und FAIRY FINDEN.
-      </div>
+      <div class="end-sub" id="end-sub"></div>
       <button id="end-newgame-btn" class="btn-secondary">Neue Partie</button>
     </div>
   </div>
@@ -522,7 +525,7 @@
     // Konfiguration
     // -----------------------------
     const OPENAI_CHAT_URL = "https://api.openai.com/v1/chat/completions";
-    const OPENAI_MODEL = "gpt-4o-mini"; // bei Bedarf anpassen
+    const OPENAI_MODEL = "gpt-4o-mini"; // Backend-Modell
     const APIKEY_STORAGE_KEY = "fairykipp_openai_key";
     const LAST_STORIES_KEY = "fairykipp_last_stories_v1";
 
@@ -540,8 +543,6 @@
       "Tasse",
       "T-Shirt"
     ];
-
-    const colors = ["blau", "grün", "orange", "violett"];
 
     // UI-Elemente
     const fairyBtn = document.getElementById("fairy-btn");
@@ -567,13 +568,15 @@
     let currentFairyText = "";
     let currentParts = [];
     let currentPartIndex = 0;
-    let currentFairyOwnedByThisDevice = false; // Hat dieses Handy FAIRY gedrückt?
+    let currentFairyOwnedByThisDevice = false;
     let score = 0;
     let narratedFairies = 0;
     const maxFairies = 6;
 
     // Zur Wiederholungs-Vermeidung
     let lastStories = [];
+    // Motiv-Rotation ohne Wiederholung
+    let unusedMotifs = [];
 
     // -----------------------------
     // Initialisierung
@@ -617,9 +620,14 @@
       }
     }
 
+    function initUnusedMotifs() {
+      unusedMotifs = motifs.slice();
+    }
+
     function init() {
       loadApiKeyFromStorage();
       loadLastStories();
+      initUnusedMotifs();
       updateScoreDisplay();
       updateFairyCountDisplay();
       updateSentenceIndicator();
@@ -642,7 +650,32 @@
         return;
       }
       sentenceIndicator.textContent =
-        "Abschnitt " + (currentPartIndex + 1) + " von " + currentParts.length;
+        "Satz " + (currentPartIndex + 1) + " von " + currentParts.length;
+    }
+
+    function highlightLastTwoWords(sentence) {
+      const text = sentence.trim();
+      const endPunctMatch = text.match(/[.!?]$/);
+      const endPunct = endPunctMatch ? endPunctMatch[0] : "";
+      const core = endPunct ? text.slice(0, -1).trim() : text;
+
+      const parts = core.split(/\s+/);
+      if (parts.length < 2) {
+        return sentence;
+      }
+
+      const secondLast = parts[parts.length - 2];
+      const last = parts[parts.length - 1];
+      const before = parts.slice(0, -2).join(" ");
+
+      const highlighted =
+        (before ? before + " " : "") +
+        '<span class="last-two">' +
+        secondLast + " " + last +
+        "</span>" +
+        endPunct;
+
+      return highlighted;
     }
 
     function showStoryPart(index) {
@@ -651,7 +684,15 @@
 
       currentPartIndex = index;
       storyTextEl.classList.remove("story-muted");
-      storyTextEl.textContent = currentParts[index];
+
+      const text = currentParts[index];
+
+      // Zweiter Satz -> letzte zwei Wörter hervorheben (Artikel + Motiv)
+      if (currentParts.length === 2 && index === 1) {
+        storyTextEl.innerHTML = highlightLastTwoWords(text);
+      } else {
+        storyTextEl.textContent = text;
+      }
 
       if (currentParts.length > 1 && index < currentParts.length - 1) {
         nextPartBtn.classList.remove("hidden");
@@ -663,29 +704,28 @@
     }
 
     function splitFairyIntoParts(text) {
-      // Zerlege in Sätze und gruppiere grob in 3 Teile
       const sentences = text
         .split(/(?<=[.!?])\s+/)
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
-      if (sentences.length <= 2) {
-        return [text];
+      // Erwartet werden genau 2 Sätze. Wenn ja, direkt so verwenden.
+      if (sentences.length === 2) {
+        return sentences;
       }
 
-      const total = sentences.length;
-      const partSize = Math.ceil(total / 3);
-
-      const parts = [];
-      for (let i = 0; i < total; i += partSize) {
-        const chunk = sentences.slice(i, i + partSize).join(" ");
-        parts.push(chunk);
-      }
-      return parts;
+      // Fallback: alles in einem Block, falls das Modell patzt
+      return [text];
     }
 
-    function chooseRandom(arr) {
-      return arr[Math.floor(Math.random() * arr.length)];
+    function chooseMotifNoImmediateRepeat() {
+      if (unusedMotifs.length === 0) {
+        initUnusedMotifs();
+      }
+      const idx = Math.floor(Math.random() * unusedMotifs.length);
+      const motif = unusedMotifs[idx];
+      unusedMotifs.splice(idx, 1);
+      return motif;
     }
 
     function storyAlreadySeen(text) {
@@ -721,7 +761,7 @@
       currentFairyOwnedByThisDevice = false;
 
       storyTextEl.textContent =
-        "Tippe auf FAIRY, um eine neue Geschichte zu starten.";
+        "Tippe auf FAIRY, um eine neue Fabel zu starten.";
       storyTextEl.classList.add("story-muted");
       nextPartBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
@@ -748,51 +788,45 @@
       }
 
       setFairyStatus("Fairy wird gezaubert …");
-      storyTextEl.textContent = "… KI webt eine neue Fairy …";
+      storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
       storyTextEl.classList.add("story-muted");
       nextPartBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
 
-      const motif = chooseRandom(motifs);
-      const color = chooseRandom(colors);
+      const motif = chooseMotifNoImmediateRepeat();
 
       const systemMessage = {
         role: "system",
         content:
-          "Du bist eine KI, die kurze, stimmige deutschsprachige Fairytales für ein Gesellschaftsspiel schreibt. " +
-          "Du kennst genau diese 12 Motive: Wasserball, Auto, Farbfleck, Buch, Gießkanne, Kerze, Blume, Fisch, Schmetterling, Schuh, Tasse, T-Shirt. " +
-          "Du kennst die Farben: blau, grün, orange, violett. " +
-          "Der Text soll mystisch, poetisch, leicht verspielt sein – aber gut verständlich und für Kinder ab 8 Jahren geeignet. " +
-          "Schreibe in der DU-Form oder in der ER/SIE-Form, aber immer in der dritten Person Singular oder als Beobachter. " +
-          "Keine direkte Ansprache an 'Kinder', keine Metakommentare über das Spiel."
+          "Du schreibst sehr kurze Fabeltexte auf Deutsch für ein Gesellschaftsspiel.\n" +
+          "Du MUSST alle folgenden Regeln strikt einhalten:\n" +
+          "- Der Text besteht aus genau 2 Sätzen.\n" +
+          "- Jeder Satz hat zwischen 12 und 16 Wörtern.\n" +
+          "- Der Text darf keine Farbwörter enthalten.\n" +
+          "- Kein Genitiv. Verwende nur Nominativ, Akkusativ oder Dativ.\n" +
+          "- Kein Dialog außer der direkten Rede im zweiten Satz.\n" +
+          "- Keine direkte Anrede mit 'du' im ersten Satz.\n" +
+          "Struktur:\n" +
+          "- Satz 1: neutrale Beobachtungsszene in der dritten Person, keine Personifikation, enthält das Motivwort nicht und keine Ableitung davon.\n" +
+          "- Satz 2: besteht IMMER aus direkter Rede, gefolgt von einem Redebegleitsatz.\n" +
+          "  Die Struktur von Satz 2 ist IMMER: \"<Direkte Rede>\", <lautliches Verb> <bestimmter Artikel> <Motiv>.\n" +
+          "Erklärungen zum Redebegleitsatz:\n" +
+          "- Das Verb im Redebegleitsatz muss ein lautliches Verb sein, das eine Äußerung oder ein Geräusch ausdrückt.\n" +
+          "- Erlaubte Beispiele: brummte, blubberte, plätscherte, raschelte, murmelte, flüsterte, knatterte, gluckerte, schnaufte, wisperte, klirrte.\n" +
+          "- Du darfst ähnliche lautliche Verben verwenden, aber KEINE reinen Bewegungsverben ohne Geräusch (z.B. flatterte, strampelte, wackelte, glänzte, vibrierte).\n" +
+          "- Das Motivwort kommt nur im zweiten Satz vor, genau einmal, und steht am Ende des Textes.\n" +
+          "- Schreibe in einem schlichten, fabelartigen Stil, ohne Märchensprache und ohne Kitsch."
       };
 
       const userMessage = {
         role: "user",
         content:
-          "Schreibe eine kurze, in sich stimmige Fairytale in deutscher Sprache, etwa 4 bis 6 Sätze lang. " +
-          "Sie soll mystisch-poetisch und leicht verspielt sein und in einer Wald- oder Traum-Atmosphäre spielen. " +
-          "Es soll genau EIN Motiv aus dieser Liste real und konkret vorkommen: " +
-          motifs.join(", ") +
-          ". In dieser Fairy soll ausdrücklich dieses Motiv vorkommen: \"" +
+          "Schreibe einen zweisätzigen Fabeltext nach den Systemregeln.\n" +
+          "Verwende als Motiv das Wort \"" +
           motif +
-          "\". " +
-          "Du darfst zusätzlich beliebige andere Dinge verwenden (Nebel, Pfad, Licht, Flüstern, Fabelwesen usw.), aber KEIN weiteres Motiv aus der Liste konkret benennen. " +
-          "Am Ende des letzten Satzes muss klar und eindeutig stehen, welches Motiv und welche Farbe relevant sind. " +
-          "Formuliere das Ende z.B. so: '... ein " +
-          motif +
-          " in " +
-          color +
-          ".' oder '... ein " +
-          motif +
-          " in strahlendem " +
-          color +
-          ".' " +
-          "WICHTIG: Das letzte Wort des Textes MUSS eine dieser Farben sein: blau, grün, orange oder violett. " +
-          "Verwende den Begriff '" +
-          motif +
-          "' nur so oft, wie es natürlich wirkt (1-2 Mal), und schreibe ansonsten bildhaft und abwechslungsreich. " +
-          "Vermeide ständige Wiederholungen wie 'leuchtend'. Verwende unterschiedliche Adjektive."
+          "\".\n" +
+          "Das Motiv darf nur im zweiten Satz vorkommen, genau einmal, und muss am Satzende stehen.\n" +
+          "Achte darauf, dass der zweite Satz exakt der Struktur \"Direkte Rede, lautliches Verb, Artikel, Motiv\" folgt."
       };
 
       try {
@@ -806,7 +840,7 @@
             model: OPENAI_MODEL,
             messages: [systemMessage, userMessage],
             temperature: 0.9,
-            max_tokens: 400
+            max_tokens: 220
           })
         });
 
@@ -817,7 +851,7 @@
         const data = await response.json();
         const text =
           data.choices?.[0]?.message?.content?.trim() ||
-          "Es huschte ein kleiner Fehler durch den Wald – die Fairy konnte nicht geladen werden.";
+          "Es huschte ein kleiner Fehler durch den Text – die Fairy konnte nicht geladen werden.";
 
         // Wiederholung vermeiden
         if (storyAlreadySeen(text) && retryCount < 3) {
@@ -829,10 +863,10 @@
         currentFairyText = text;
         currentParts = splitFairyIntoParts(text);
         currentPartIndex = 0;
-        currentFairyOwnedByThisDevice = true; // dieses Handy hat FAIRY ausgelöst
+        currentFairyOwnedByThisDevice = true;
 
         showStoryPart(0);
-        setFairyStatus("Neue Fairy ist aktiv.");
+        setFairyStatus("Neue Fabel ist aktiv.");
       } catch (err) {
         console.error(err);
         setFairyStatus(
@@ -865,7 +899,7 @@
     fairyFundBtn.addEventListener("click", () => {
       if (!currentFairyText) {
         setFairyStatus(
-          "Erst eine Fairy starten, dann kannst du FAIRY FUND nutzen.",
+          "Erst eine Fabel starten, dann kannst du FAIRY FUND nutzen.",
           true
         );
         return;
@@ -892,7 +926,7 @@
       currentFairyOwnedByThisDevice = false;
 
       storyTextEl.textContent =
-        "Fairy verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
+        "Fabel verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
       storyTextEl.classList.add("story-muted");
       nextPartBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
