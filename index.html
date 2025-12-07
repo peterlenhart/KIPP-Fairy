@@ -225,16 +225,13 @@
       font-size: 1.35rem;
       line-height: 1.7;
       background: radial-gradient(circle at top left, #252525 0, #111 55%);
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
       overflow-y: auto;
       text-align: center;
     }
 
     #story-text {
       width: 100%;
-      white-space: pre-wrap;   /* damit \n\n\n sichtbar werden */
+      white-space: pre-wrap;   /* Zeilenumbrüche anzeigen */
       font-weight: 600;
     }
 
@@ -243,6 +240,19 @@
       font-style: italic;
       font-size: 0.95rem;
       font-weight: 400;
+    }
+
+    /* Motivwort extra groß */
+    .motif-big {
+      width: 100%;
+      text-align: center;
+      font-size: clamp(1.6rem, 9vw, 2.3rem);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-top: 16px;  /* Abstand = kleine Scrollstrecke */
+      line-height: 1.1;
+      white-space: nowrap; /* Ausnahme Schmetterling in JS */
     }
 
     .story-footer {
@@ -451,7 +461,7 @@
 
       <div class="button-row">
         <button id="fairy-btn" class="btn-main">FAIRY</button>
-        <!-- MOTIV-Button NICHT MEHR VERWENDET, ABER GELASSEN DAMIT NICHTS BRICHT -->
+        <!-- MOTIV-Button bleibt versteckt, damit bestehender Code nicht bricht -->
         <button id="reveal-motif-btn" class="btn-small hidden">MOTIV</button>
       </div>
 
@@ -459,6 +469,7 @@
         <div id="story-text" class="story-muted">
           Tippe auf <strong>FAIRY</strong>, um eine neue Fabel zu starten.
         </div>
+        <div id="story-motif" class="motif-big hidden"></div>
       </div>
 
       <div class="story-footer">
@@ -579,6 +590,7 @@
     const revealMotifBtn = document.getElementById("reveal-motif-btn"); // bleibt versteckt
     const fairyStatus = document.getElementById("fairy-status");
     const storyTextEl = document.getElementById("story-text");
+    const storyMotifEl = document.getElementById("story-motif");
     const sentenceIndicator = document.getElementById("sentence-indicator");
 
     const scoreValueEl = document.getElementById("score-value");
@@ -656,6 +668,10 @@
       storyTextEl.textContent =
         "Tippe auf FAIRY, um eine neue Fabel zu starten.";
       storyTextEl.classList.add("story-muted");
+
+      storyMotifEl.textContent = "";
+      storyMotifEl.classList.add("hidden");
+
       sentenceIndicator.textContent = "";
       setFairyStatus("");
 
@@ -668,6 +684,18 @@
       unusedMotifs = motifsData.slice();
     }
 
+    function chooseMotifNoImmediateRepeat() {
+      if (unusedMotifs.length === 0) {
+        initUnusedMotifs();
+      }
+      const idx = Math.floor(Math.random() * (i + 1));
+      const motif = unusedMotifs[idx];
+      unusedMotifs.splice(idx, 1);
+      return motif;
+    }
+
+    // !!! BUGFIX: der obige Code hat einen Fehler (i ist undefined).
+    // Korrigierte Version:
     function chooseMotifNoImmediateRepeat() {
       if (unusedMotifs.length === 0) {
         initUnusedMotifs();
@@ -789,6 +817,10 @@
       setFairyStatus("Fairy wird gezaubert …");
       storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
       storyTextEl.classList.add("story-muted");
+
+      storyMotifEl.textContent = "";
+      storyMotifEl.classList.add("hidden");
+
       sentenceIndicator.textContent = "";
 
       // 1. Random Motiv + Artikel
@@ -858,8 +890,8 @@
         let text = data.choices?.[0]?.message?.content?.trim() || "";
 
         // Korrektur: Anführungszeichen + Beistrich + Leerzeichen
-        // z.B. „...“,flüsterte -> „...“, flüsterte
-        text = text.replace(/([„”"])\s*,\s*/g, '$1, ');
+        // „...“,flüsterte -> „...“, flüsterte
+        text = text.replace(/([“”„\"])\s*,\s*/g, '$1, ');
 
         const result = splitTextAndMotif(text, motifObj, verb);
 
@@ -879,7 +911,13 @@
           currentFairyOwnedByThisDevice = true;
 
           storyTextEl.classList.remove("story-muted");
-          storyTextEl.textContent = fallbackMain + "\n\n\n" + fallbackMotif;
+          storyTextEl.textContent = fallbackMain;
+
+          storyMotifEl.textContent = fallbackMotif;
+          storyMotifEl.classList.remove("hidden");
+          storyMotifEl.style.whiteSpace =
+            motifObj.noun.toLowerCase() === "schmetterling" ? "normal" : "nowrap";
+
           setFairyStatus("Neue Fabel ist aktiv (Fallback).");
           return;
         }
@@ -889,8 +927,14 @@
         currentFairyOwnedByThisDevice = true;
 
         storyTextEl.classList.remove("story-muted");
-        // Text + kleine „Scrollstrecke“ + Motiv
-        storyTextEl.textContent = currentStoryText + "\n\n\n" + currentMotifDisplay;
+        storyTextEl.textContent = currentStoryText;
+
+        // Motiv groß und zentriert, mit Schmetterling-Ausnahme
+        storyMotifEl.textContent = currentMotifDisplay;
+        storyMotifEl.classList.remove("hidden");
+        storyMotifEl.style.whiteSpace =
+          motifObj.noun.toLowerCase() === "schmetterling" ? "normal" : "nowrap";
+
         sentenceIndicator.textContent = "";
         setFairyStatus("Neue Fabel ist aktiv.");
       } catch (err) {
@@ -902,6 +946,8 @@
         storyTextEl.textContent =
           "Die Fairy hat sich im Nebel verirrt. Prüfe bitte Internetverbindung und API-Key.";
         storyTextEl.classList.remove("story-muted");
+        storyMotifEl.textContent = "";
+        storyMotifEl.classList.add("hidden");
       }
     }
 
@@ -912,7 +958,7 @@
       await generateFairyFromOpenAI();
     });
 
-    // MOTIV-Button bleibt versteckt und ohne Funktion
+    // MOTIV-Button bleibt dauerhaft versteckt
     revealMotifBtn.classList.add("hidden");
 
     fairyFundBtn.addEventListener("click", () => {
@@ -943,6 +989,10 @@
       storyTextEl.textContent =
         "Fabel verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
       storyTextEl.classList.add("story-muted");
+
+      storyMotifEl.textContent = "";
+      storyMotifEl.classList.add("hidden");
+
       sentenceIndicator.textContent = "";
       setFairyStatus("");
 
