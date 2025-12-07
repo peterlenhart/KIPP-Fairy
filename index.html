@@ -221,32 +221,19 @@
       border-radius: 10px;
       border: 1px solid var(--fk-border);
       padding: 10px 11px;
+      font-size: 1.05rem;
+      line-height: 1.55;
       background: radial-gradient(circle at top left, #252525 0, #111 55%);
       display: flex;
       align-items: flex-start;
-      justify-content: center;
+      justify-content: flex-start;
       overflow-y: auto;
-    }
-
-    #story-text {
-      width: 100%;
-    }
-
-    /* Gedicht-Layout */
-    .story-poem {
-      text-align: center;
-      font-size: 1.45rem;   /* deutlich größer */
-      font-weight: 600;
-      line-height: 1.6;
-      max-width: 80%;
-      margin: 0 auto;
     }
 
     .story-muted {
       color: var(--fk-muted);
       font-style: italic;
       font-size: 0.95rem;
-      text-align: center;
     }
 
     .story-footer {
@@ -263,30 +250,17 @@
       color: var(--fk-violet);
     }
 
-    /* Motiv-Ausgabe als Wort */
     .motif-big {
       width: 100%;
       text-align: center;
-      font-size: clamp(1.8rem, 9vw, 2.4rem);
+      font-size: clamp(1.6rem, 9vw, 2.3rem);
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       margin-top: 4px;
       line-height: 1.1;
       white-space: nowrap;
-    }
-
-    /* Spezielle Formatierung für SCHMETTERLING */
-    .motif-big-schmetterling {
-      width: 100%;
-      text-align: center;
-      font-size: clamp(1.6rem, 7vw, 2.0rem);
-      font-weight: 800;
-      letter-spacing: 0.02em;
-      text-transform: uppercase;
-      margin-top: 4px;
-      line-height: 1.1;
-      white-space: normal; /* darf umbrechen */
+      display: block;
     }
 
     .score-row {
@@ -673,6 +647,28 @@
       endOverlay.style.display = "flex";
     }
 
+    function escapeHTML(str) {
+      return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function buildStoryHTML(mainText, motifUpper) {
+      const safeMain = escapeHTML(mainText);
+      const safeMotif = escapeHTML(motifUpper);
+      // Zwei, drei Zeilen Abstand, dann das Motiv groß
+      return (
+        safeMain +
+        "<br><br><br>" +
+        '<span class="motif-big">' +
+        safeMotif +
+        "</span>"
+      );
+    }
+
     function resetGameState() {
       score = 0;
       narratedFairies = 0;
@@ -682,11 +678,11 @@
       currentMotifDisplay = "";
       currentFairyOwnedByThisDevice = false;
 
-      storyTextEl.className = "";
-      storyTextEl.classList.add("story-muted");
       storyTextEl.textContent =
         "Tippe auf FAIRY, um eine neue Fabel zu starten.";
-
+      storyTextEl.classList.add("story-muted");
+      storyTextEl.classList.remove("motif-big");
+      storyTextEl.style.whiteSpace = "normal";
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
@@ -761,17 +757,20 @@
       if (
         motifCandidate.toLowerCase() !== motifObj.noun.toLowerCase()
       ) {
+        // passt nicht zu unserem Motiv → ablehnen
         return null;
       }
 
-      // zweit- und drittletztes Wort prüfen
+      // Sicherheit: dritt- und zweitletztes Wort prüfen (Verb + Artikel)
       let secondLastRaw = tokens[tokens.length - 2];
       let thirdLastRaw = tokens[tokens.length - 3];
 
       let secondLast = secondLastRaw.replace(/[.,!?;"“”„]+$/g, "").toLowerCase();
       let thirdLast = thirdLastRaw.replace(/[.,!?;"“”„]+$/g, "").toLowerCase();
 
-      if (secondLast !== motifObj.article.toLowerCase()) {
+      if (
+        secondLast !== motifObj.article.toLowerCase()
+      ) {
         return null;
       }
 
@@ -780,10 +779,11 @@
         .map((v) => v.toLowerCase());
 
       if (!allowedVerbs.includes(thirdLast)) {
+        // Verb entspricht nicht unserem Pool
         return null;
       }
 
-      // KEIN Motivwort vorher im Text
+      // KEIN Motivwort irgendwo vorher im Text
       const beforeTokens = tokens.slice(0, -1);
       const lowerMotif = motifObj.noun.toLowerCase();
       for (const t of beforeTokens) {
@@ -793,6 +793,7 @@
         }
       }
 
+      // Jetzt nur das letzte Wort (Motiv) abzwicken:
       const mainTokens = tokens.slice(0, -1);
       const mainText = mainTokens.join(" ");
 
@@ -818,9 +819,10 @@
       }
 
       setFairyStatus("Fairy wird gezaubert …");
-      storyTextEl.className = "";
-      storyTextEl.classList.add("story-muted");
       storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
+      storyTextEl.classList.add("story-muted");
+      storyTextEl.classList.remove("motif-big");
+      storyTextEl.style.whiteSpace = "normal";
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
 
@@ -844,7 +846,8 @@
           "- Keine Farbwörter (blau, grün, orange, violett usw.).\n" +
           "- Verwende das Motivwort nur in der Schlussphrase, die ich dir nenne.\n" +
           "- Kein Genitiv.\n" +
-          "- Kein 'sagte', 'meinte', 'dachte'.\n"
+          "- Kein 'sagte', 'meinte', 'dachte'.\n" +
+          "- Verwende deutsche Zeichensetzung bei wörtlicher Rede: „…“, murmelte die Tasse.\n"
       };
 
       const userMessage = {
@@ -890,6 +893,9 @@
         const data = await response.json();
         let text = data.choices?.[0]?.message?.content?.trim() || "";
 
+        // Englische Zeichensetzung „,…“ → deutsches „…“, …
+        text = text.replace(/,"\s*/g, '", ');
+
         const result = splitTextAndMotif(text, motifObj, verb);
 
         if (!result && retryCount < 3) {
@@ -897,17 +903,21 @@
         }
 
         if (!result && retryCount >= 3) {
-          const fallback =
+          // Fallback: einfache Not-Fabel, damit die App nicht hängen bleibt
+          const fallbackMain =
             "Etwas Unbenanntes wartete geduldig am Rand des Spielfelds. " +
             "\"Jetzt kommt mein Moment\", murmelte die.";
-          currentStoryText = fallback;
+          currentStoryText = fallbackMain;
           currentMotifDisplay = motifObj.noun.toUpperCase();
           currentFairyOwnedByThisDevice = true;
 
-          storyTextEl.className = "";
-          storyTextEl.classList.add("story-poem");
-          storyTextEl.textContent = currentStoryText;
-          revealMotifBtn.classList.remove("hidden");
+          storyTextEl.classList.remove("story-muted");
+          storyTextEl.classList.remove("motif-big");
+          storyTextEl.style.whiteSpace = "normal";
+          storyTextEl.innerHTML = buildStoryHTML(
+            currentStoryText,
+            currentMotifDisplay
+          );
           sentenceIndicator.textContent = "";
           setFairyStatus("Neue Fabel ist aktiv (Fallback).");
           return;
@@ -917,10 +927,13 @@
         currentMotifDisplay = result.motifDisplay;
         currentFairyOwnedByThisDevice = true;
 
-        storyTextEl.className = "";
-        storyTextEl.classList.add("story-poem");
-        storyTextEl.textContent = currentStoryText;
-        revealMotifBtn.classList.remove("hidden");
+        storyTextEl.classList.remove("story-muted");
+        storyTextEl.classList.remove("motif-big");
+        storyTextEl.style.whiteSpace = "normal";
+        storyTextEl.innerHTML = buildStoryHTML(
+          currentStoryText,
+          currentMotifDisplay
+        );
         sentenceIndicator.textContent = "";
         setFairyStatus("Neue Fabel ist aktiv.");
       } catch (err) {
@@ -929,9 +942,9 @@
           "Fehler beim Laden der Fairy (Internet oder API-Key prüfen).",
           true
         );
-        storyTextEl.className = "";
         storyTextEl.textContent =
           "Die Fairy hat sich im Nebel verirrt. Prüfe bitte Internetverbindung und API-Key.";
+        storyTextEl.classList.remove("story-muted");
       }
     }
 
@@ -942,23 +955,8 @@
       await generateFairyFromOpenAI();
     });
 
-    revealMotifBtn.addEventListener("click", () => {
-      if (!currentMotifDisplay) return;
-
-      storyTextEl.className = "";
-
-      if (
-        currentMotif &&
-        currentMotif.noun &&
-        currentMotif.noun === "Schmetterling"
-      ) {
-        storyTextEl.classList.add("motif-big-schmetterling");
-        storyTextEl.textContent = "SCHMETTERLING";
-      } else {
-        storyTextEl.classList.add("motif-big");
-        storyTextEl.textContent = currentMotifDisplay;
-      }
-    });
+    // MOTIV-Button wird nicht mehr verwendet, bleibt aber unsichtbar
+    // revealMotifBtn.addEventListener(...) entfällt absichtlich
 
     fairyFundBtn.addEventListener("click", () => {
       if (!currentStoryText && !currentMotifDisplay) {
@@ -985,10 +983,11 @@
       currentMotifDisplay = "";
       currentFairyOwnedByThisDevice = false;
 
-      storyTextEl.className = "";
-      storyTextEl.classList.add("story-muted");
       storyTextEl.textContent =
         "Fabel verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
+      storyTextEl.classList.add("story-muted");
+      storyTextEl.classList.remove("motif-big");
+      storyTextEl.style.whiteSpace = "normal";
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
