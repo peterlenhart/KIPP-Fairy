@@ -221,19 +221,32 @@
       border-radius: 10px;
       border: 1px solid var(--fk-border);
       padding: 10px 11px;
-      font-size: 1.05rem;
-      line-height: 1.55;
       background: radial-gradient(circle at top left, #252525 0, #111 55%);
       display: flex;
       align-items: flex-start;
-      justify-content: flex-start;
+      justify-content: center;
       overflow-y: auto;
+    }
+
+    #story-text {
+      width: 100%;
+    }
+
+    /* Gedicht-Layout */
+    .story-poem {
+      text-align: center;
+      font-size: 1.45rem;   /* deutlich größer */
+      font-weight: 600;
+      line-height: 1.6;
+      max-width: 80%;
+      margin: 0 auto;
     }
 
     .story-muted {
       color: var(--fk-muted);
       font-style: italic;
       font-size: 0.95rem;
+      text-align: center;
     }
 
     .story-footer {
@@ -250,16 +263,30 @@
       color: var(--fk-violet);
     }
 
+    /* Motiv-Ausgabe als Wort */
     .motif-big {
       width: 100%;
       text-align: center;
-      font-size: clamp(1.6rem, 9vw, 2.3rem);
+      font-size: clamp(1.8rem, 9vw, 2.4rem);
       font-weight: 800;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       margin-top: 4px;
       line-height: 1.1;
       white-space: nowrap;
+    }
+
+    /* Spezielle Formatierung für SCHMETTERLING */
+    .motif-big-schmetterling {
+      width: 100%;
+      text-align: center;
+      font-size: clamp(1.6rem, 7vw, 2.0rem);
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      margin-top: 4px;
+      line-height: 1.1;
+      white-space: normal; /* darf umbrechen */
     }
 
     .score-row {
@@ -655,11 +682,11 @@
       currentMotifDisplay = "";
       currentFairyOwnedByThisDevice = false;
 
+      storyTextEl.className = "";
+      storyTextEl.classList.add("story-muted");
       storyTextEl.textContent =
         "Tippe auf FAIRY, um eine neue Fabel zu starten.";
-      storyTextEl.classList.add("story-muted");
-      storyTextEl.classList.remove("motif-big");
-      storyTextEl.style.whiteSpace = "normal";
+
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
@@ -734,20 +761,17 @@
       if (
         motifCandidate.toLowerCase() !== motifObj.noun.toLowerCase()
       ) {
-        // passt nicht zu unserem Motiv → ablehnen
         return null;
       }
 
-      // Sicherheit: dritt- und zweitletztes Wort prüfen (Verb + Artikel)
+      // zweit- und drittletztes Wort prüfen
       let secondLastRaw = tokens[tokens.length - 2];
       let thirdLastRaw = tokens[tokens.length - 3];
 
       let secondLast = secondLastRaw.replace(/[.,!?;"“”„]+$/g, "").toLowerCase();
       let thirdLast = thirdLastRaw.replace(/[.,!?;"“”„]+$/g, "").toLowerCase();
 
-      if (
-        secondLast !== motifObj.article.toLowerCase()
-      ) {
+      if (secondLast !== motifObj.article.toLowerCase()) {
         return null;
       }
 
@@ -756,11 +780,10 @@
         .map((v) => v.toLowerCase());
 
       if (!allowedVerbs.includes(thirdLast)) {
-        // Verb entspricht nicht unserem Pool
         return null;
       }
 
-      // KEIN Motivwort irgendwo vorher im Text
+      // KEIN Motivwort vorher im Text
       const beforeTokens = tokens.slice(0, -1);
       const lowerMotif = motifObj.noun.toLowerCase();
       for (const t of beforeTokens) {
@@ -770,7 +793,6 @@
         }
       }
 
-      // Jetzt nur das letzte Wort (Motiv) abzwicken:
       const mainTokens = tokens.slice(0, -1);
       const mainText = mainTokens.join(" ");
 
@@ -796,10 +818,9 @@
       }
 
       setFairyStatus("Fairy wird gezaubert …");
-      storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
+      storyTextEl.className = "";
       storyTextEl.classList.add("story-muted");
-      storyTextEl.classList.remove("motif-big");
-      storyTextEl.style.whiteSpace = "normal";
+      storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
 
@@ -876,7 +897,6 @@
         }
 
         if (!result && retryCount >= 3) {
-          // Fallback: einfache Not-Fabel, damit die App nicht hängen bleibt
           const fallback =
             "Etwas Unbenanntes wartete geduldig am Rand des Spielfelds. " +
             "\"Jetzt kommt mein Moment\", murmelte die.";
@@ -884,9 +904,8 @@
           currentMotifDisplay = motifObj.noun.toUpperCase();
           currentFairyOwnedByThisDevice = true;
 
-          storyTextEl.classList.remove("story-muted");
-          storyTextEl.classList.remove("motif-big");
-          storyTextEl.style.whiteSpace = "normal";
+          storyTextEl.className = "";
+          storyTextEl.classList.add("story-poem");
           storyTextEl.textContent = currentStoryText;
           revealMotifBtn.classList.remove("hidden");
           sentenceIndicator.textContent = "";
@@ -898,9 +917,8 @@
         currentMotifDisplay = result.motifDisplay;
         currentFairyOwnedByThisDevice = true;
 
-        storyTextEl.classList.remove("story-muted");
-        storyTextEl.classList.remove("motif-big");
-        storyTextEl.style.whiteSpace = "normal";
+        storyTextEl.className = "";
+        storyTextEl.classList.add("story-poem");
         storyTextEl.textContent = currentStoryText;
         revealMotifBtn.classList.remove("hidden");
         sentenceIndicator.textContent = "";
@@ -911,9 +929,9 @@
           "Fehler beim Laden der Fairy (Internet oder API-Key prüfen).",
           true
         );
+        storyTextEl.className = "";
         storyTextEl.textContent =
           "Die Fairy hat sich im Nebel verirrt. Prüfe bitte Internetverbindung und API-Key.";
-        storyTextEl.classList.remove("story-muted");
       }
     }
 
@@ -927,19 +945,18 @@
     revealMotifBtn.addEventListener("click", () => {
       if (!currentMotifDisplay) return;
 
-      storyTextEl.classList.remove("story-muted");
-      storyTextEl.classList.add("motif-big");
-      storyTextEl.textContent = currentMotifDisplay;
+      storyTextEl.className = "";
 
-      // Schmetterling darf umbrechen
       if (
         currentMotif &&
         currentMotif.noun &&
-        currentMotif.noun.toLowerCase() === "schmetterling"
+        currentMotif.noun === "Schmetterling"
       ) {
-        storyTextEl.style.whiteSpace = "normal";
+        storyTextEl.classList.add("motif-big-schmetterling");
+        storyTextEl.textContent = "SCHMETTERLING";
       } else {
-        storyTextEl.style.whiteSpace = "nowrap";
+        storyTextEl.classList.add("motif-big");
+        storyTextEl.textContent = currentMotifDisplay;
       }
     });
 
@@ -968,11 +985,10 @@
       currentMotifDisplay = "";
       currentFairyOwnedByThisDevice = false;
 
+      storyTextEl.className = "";
+      storyTextEl.classList.add("story-muted");
       storyTextEl.textContent =
         "Fabel verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
-      storyTextEl.classList.add("story-muted");
-      storyTextEl.classList.remove("motif-big");
-      storyTextEl.style.whiteSpace = "normal";
       revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
