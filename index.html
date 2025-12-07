@@ -133,6 +133,8 @@
     .button-row {
       display: flex;
       justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     button {
@@ -204,7 +206,7 @@
     .btn-small {
       padding: 4px 10px;
       border-radius: 999px;
-      font-size: 0.75rem;
+      font-size: 0.8rem;
       border: 1px solid var(--fk-violet);
       background: transparent;
       color: var(--fk-violet);
@@ -216,29 +218,31 @@
       background: rgba(170, 0, 120, 0.1);
     }
 
-    /* Fairy text */
+    /* Story box – größer + scroll */
     .story-box {
       min-height: 130px;
+      max-height: 210px;
       border-radius: 10px;
       border: 1px solid var(--fk-border);
       padding: 10px 11px;
-      font-size: 0.9rem;
-      line-height: 1.5;
+      font-size: 1.05rem;
+      line-height: 1.55;
       background: radial-gradient(circle at top left, #252525 0, #111 55%);
       display: flex;
       align-items: flex-start;
       justify-content: flex-start;
+      overflow-y: auto;
     }
 
     .story-muted {
       color: var(--fk-muted);
       font-style: italic;
-      font-size: 0.85rem;
+      font-size: 0.95rem;
     }
 
     .story-footer {
       display: flex;
-      justify-content: space-between;
+      justify-content: center;
       align-items: center;
       gap: 8px;
       font-size: 0.8rem;
@@ -250,18 +254,17 @@
       color: var(--fk-violet);
     }
 
-    /* Motiv – letzte Ausgabe, eine Zeile */
+    /* Motiv – letzte Ausgabe, groß */
     .motif-big {
       width: 100%;
       text-align: center;
-      font-size: clamp(1.4rem, 8vw, 2rem);
+      font-size: clamp(1.6rem, 9vw, 2.3rem);
       font-weight: 800;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       margin-top: 4px;
       line-height: 1.1;
-      white-space: nowrap;   /* keine zweite Zeile */
-      padding: 0 4px;
+      white-space: nowrap; /* Standard: kein Umbruch */
     }
 
     /* Scoreboard */
@@ -424,12 +427,6 @@
     .status-error {
       color: #ff6b81;
     }
-
-    @media (max-height: 620px) {
-      .story-box {
-        min-height: 105px;
-      }
-    }
   </style>
 </head>
 <body>
@@ -465,6 +462,7 @@
 
       <div class="button-row">
         <button id="fairy-btn" class="btn-main">FAIRY</button>
+        <button id="reveal-motif-btn" class="btn-small hidden">MOTIV ZEIGEN</button>
       </div>
 
       <div class="story-box" id="story-box">
@@ -474,7 +472,6 @@
       </div>
 
       <div class="story-footer">
-        <button id="next-part-btn" class="btn-small hidden">WEITER</button>
         <div class="sentence-indicator" id="sentence-indicator"></div>
       </div>
     </section>
@@ -539,10 +536,7 @@
       { full: "das T-Shirt", article: "das", noun: "T-Shirt", key: "T-Shirt" }
     ];
 
-    // Neutrale Verben, die immer gehen
-    const commonVerbs = ["sagte", "meinte", "dachte"];
-
-    // Motiv-spezifische Lautverben (bereinigt nach deinen Vorgaben)
+    // Motiv-spezifische Lautverben (bereinigt, wie gemeinsam festgelegt)
     const motifVerbBase = {
       Wasserball: ["platschte", "plumpste", "spritzte", "hüpfte", "polterte", "ploppte"],
       Auto: ["brummte", "knatterte", "röhrte", "tuckerte", "schnurrte", "hupte", "quietschte", "dröhnte", "heulte", "fauchte"],
@@ -552,13 +546,11 @@
       Kerze: ["flackerte", "knisterte", "zischte", "glomm", "flüsterte", "seufzte", "hauchte"],
       Blume: ["flüsterte", "hauchte", "seufzte", "wisperte", "raschelte", "murmelte", "säuselte", "flötete"],
       Fisch: ["blubberte", "gluckerte", "sprudelte", "murmelte", "schmatzte", "zischte", "schlürfte", "schwapperte", "gluckste"],
-      Schmetterling: ["flüsterte", "wisperte", "hauchte", "seufzte", "säuselte", "murmelte", "kicherte", "raunte", "trillierte", "zirpte"],
+      Schmetterling: ["flüsterte", "wisperte", "hauchte", "seufzte", "säuselte", "murmelte", "kicherte", "trillierte", "zirpte"],
       Schuh: ["quietschte", "klackte", "schlurfte", "knirschte", "tappte", "stapfte", "polterte", "scharrte", "knarzte"],
       Tasse: ["klirrte", "klimperte", "klackte", "knackte", "zitterte", "murmelte", "summte", "brummte", "seufzte"],
       "T-Shirt": ["raschelte", "flatterte", "seufzte", "wisperte", "knisterte", "murmelte", "hauchte", "säuselte"]
     };
-
-    const pronounByArticle = { der: "er", die: "sie", das: "es" };
 
     // -----------------------------
     // Zustände & Speicher
@@ -571,8 +563,8 @@
 
     let currentMotif = null;       // {full, article, noun, key}
     let currentVerb = null;
-    let currentParts = [];
-    let currentPartIndex = 0;
+    let currentStoryText = "";
+    let currentMotifDisplay = "";
     let currentFairyOwnedByThisDevice = false;
 
     let score = 0;
@@ -584,9 +576,8 @@
     // -----------------------------
     const fairyBtn = document.getElementById("fairy-btn");
     const fairyStatus = document.getElementById("fairy-status");
-    const storyBox = document.getElementById("story-box");
     const storyTextEl = document.getElementById("story-text");
-    const nextPartBtn = document.getElementById("next-part-btn");
+    const revealMotifBtn = document.getElementById("reveal-motif-btn");
     const sentenceIndicator = document.getElementById("sentence-indicator");
     const scoreValueEl = document.getElementById("score-value");
     const fairyCountEl = document.getElementById("fairy-count");
@@ -677,7 +668,7 @@
 
     function getAllowedVerbsForMotif(noun) {
       const base = motifVerbBase[noun] || [];
-      return base.concat(commonVerbs);
+      return base.slice();
     }
 
     function initUnusedVerbsForMotif(noun) {
@@ -705,63 +696,21 @@
       fairyCountEl.textContent = String(narratedFairies);
     }
 
-    function updateSentenceIndicator() {
-      if (!currentParts || currentParts.length === 0) {
-        sentenceIndicator.textContent = "";
-        return;
-      }
-      if (currentParts.length === 3) {
-        if (currentPartIndex === 0) {
-          sentenceIndicator.textContent = "Satz 1 von 2";
-        } else if (currentPartIndex === 1) {
-          sentenceIndicator.textContent = "Satz 2 von 2";
-        } else {
-          sentenceIndicator.textContent = "Motiv";
-        }
-      } else {
-        sentenceIndicator.textContent =
-          "Teil " + (currentPartIndex + 1) + " von " + currentParts.length;
-      }
-    }
-
-    function showStoryPart(index) {
-      if (!currentParts || currentParts.length === 0) return;
-      if (index < 0 || index >= currentParts.length) return;
-
-      currentPartIndex = index;
-      storyTextEl.classList.remove("story-muted");
-      storyTextEl.classList.remove("motif-big");
-
-      if (currentParts.length === 3 && index === 2) {
-        storyTextEl.textContent = currentParts[index];
-        storyTextEl.classList.add("motif-big");
-      } else {
-        storyTextEl.textContent = currentParts[index];
-      }
-
-      if (index < currentParts.length - 1) {
-        nextPartBtn.classList.remove("hidden");
-      } else {
-        nextPartBtn.classList.add("hidden");
-      }
-
-      updateSentenceIndicator();
-    }
-
     function resetGameState() {
       score = 0;
       narratedFairies = 0;
       currentMotif = null;
       currentVerb = null;
-      currentParts = [];
-      currentPartIndex = 0;
+      currentStoryText = "";
+      currentMotifDisplay = "";
       currentFairyOwnedByThisDevice = false;
 
       storyTextEl.textContent =
         "Tippe auf FAIRY, um eine neue Fabel zu starten.";
       storyTextEl.classList.add("story-muted");
       storyTextEl.classList.remove("motif-big");
-      nextPartBtn.classList.add("hidden");
+      storyTextEl.style.whiteSpace = "normal";
+      revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
 
@@ -776,9 +725,6 @@
       endOverlay.style.display = "flex";
     }
 
-    // -----------------------------
-    // KI-Validierung & Aufteilung
-    // -----------------------------
     function splitIntoSentences(text) {
       return text
         .split(/(?<=[.!?])\s+/)
@@ -786,42 +732,38 @@
         .filter((s) => s.length > 0);
     }
 
-    function validateAndBuildParts(text, motifObj, verb) {
+    // Validierung:
+    // - genau 2 Sätze
+    // - kein Motivwort im Text
+    // - keine Farbwörter
+    // Gibt zurück:
+    // { storyText: "Satz1\n\nSatz2", motifDisplay: "SCHMETTERLING" }
+    function validateAndBuildStory(text, motifObj) {
       const noun = motifObj.noun;
 
       const sentences = splitIntoSentences(text);
-      if (sentences.length < 2) {
+      if (sentences.length !== 2) {
         return null;
       }
 
-      const s1 = sentences[0];
-      let s2 = sentences[1];
+      const full = sentences.join(" ");
 
-      // Motiv darf nirgendwo im Text ausgeschrieben vorkommen
-      const motifRegex = new RegExp(noun, "i");
-      if (motifRegex.test(text)) {
+      // Motiv darf nicht im Text vorkommen
+      const motifRegex = new RegExp("\\b" + noun + "\\b", "i");
+      if (motifRegex.test(full)) {
         return null;
       }
 
       // Farben vermeiden (blau, grün, orange, violett)
       const colorRegex = /\b(blau|grün|orange|violett)\b/i;
-      if (colorRegex.test(text)) {
+      if (colorRegex.test(full)) {
         return null;
       }
 
-      // Satz 2: nur Rede, evtl. mit Punkt vor dem Anführungszeichen -> entfernen
-      s2 = s2.replace(/([.!?])(".*)$/g, '$2').trim();
+      const storyText = sentences[0] + "\n\n" + sentences[1];
+      const motifDisplay = motifObj.noun.toUpperCase();
 
-      // Pronomen für Sprecheranhang
-      const pronoun = pronounByArticle[motifObj.article] || "es";
-
-      // Zweite Anzeige: Rede + Verb + Pronomen, OHNE Punkt am Ende
-      const secondDisplay =
-        s2.replace(/\s+$/, "") + ", " + verb + " " + pronoun;
-
-      const motifDisplay = noun.toUpperCase();
-
-      return [s1, secondDisplay, motifDisplay];
+      return { storyText, motifDisplay };
     }
 
     // -----------------------------
@@ -843,7 +785,8 @@
       storyTextEl.textContent = "… KI schreibt eine neue Fabel …";
       storyTextEl.classList.add("story-muted");
       storyTextEl.classList.remove("motif-big");
-      nextPartBtn.classList.add("hidden");
+      storyTextEl.style.whiteSpace = "normal";
+      revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
 
       // Motiv & Verb wählen (mit Verbrauchspool)
@@ -856,17 +799,14 @@
         role: "system",
         content:
           "Du schreibst sehr kurze Fabeltexte auf Deutsch für ein Gesellschaftsspiel.\n" +
-          "HALTE DICH SO GUT WIE MÖGLICH AN DIESE REGELN:\n" +
+          "Regeln:\n" +
           "- Schreibe GENAU 2 Sätze.\n" +
-          "- Ziel: ungefähr 12–16 Wörter pro Satz.\n" +
+          "- Beide Sätze zusammen sollen ungefähr 20 bis 26 Wörter haben.\n" +
           "- Keine Farbwörter wie blau, grün, orange, violett.\n" +
           "- Kein Genitiv (kein 'des X'), nur Nominativ, Akkusativ oder Dativ.\n" +
           "- Keine direkte Anrede mit 'du' oder 'ihr'.\n" +
           "- Keine märchenhafte Kitsch-Sprache, sondern einfache, neutrale Fabelsprache.\n" +
-          "Struktur:\n" +
-          "- Satz 1: neutrale Beobachtungsszene in der dritten Person. Das Motivwort darf NICHT vorkommen.\n" +
-          "- Satz 2: besteht AUSSCHLIESSLICH aus der wörtlichen Rede in Anführungszeichen. KEIN angehängtes 'sagte er' o.ä., KEIN weiteres Verb, KEIN Sprecheranhang.\n" +
-          "- Das eigentliche Motivwort und der Sprecheranhang werden NICHT von dir geschrieben.\n"
+          "- Verwende das Motivwort nicht; es bleibt im Hintergrund.\n"
       };
 
       const userMessage = {
@@ -875,17 +815,15 @@
           "Stelle dir vor, die unsichtbare Hauptfigur dieser Fabel ist: \"" +
           motifObj.noun +
           "\".\n" +
-          "Schreibe genau 2 Sätze.\n" +
+          "Schreibe genau 2 Sätze mit insgesamt etwa 20 bis 26 Wörtern.\n" +
           "Satz 1: neutrale Beobachtungsszene in der dritten Person, ohne das Wort \"" +
           motifObj.noun +
           "\" und ohne Hinweise auf Farben.\n" +
-          "Satz 2: NUR die wörtliche Rede in Anführungszeichen, ohne Sprecheranhang, ohne Verb wie 'sagte', ohne Artikel und ohne das Wort \"" +
+          "Satz 2: ebenfalls in der dritten Person oder als Erzähler, ohne das Wort \"" +
           motifObj.noun +
-          "\".\n" +
-          "Beispiel für Satz 2 (nur als Form, Inhalt frei erfunden): \"Jetzt bin ich an der Reihe\".\n" +
-          "Die Figur, die spricht, ist in Wahrheit das nicht genannte Motiv \"" +
-          motifObj.noun +
-          "\"."
+          "\" und ohne Farben.\n" +
+          "Stil: ruhig, klar, leicht fabelhaft, aber nicht kitschig.\n" +
+          "Gib nur diese zwei Sätze zurück, sonst nichts."
       };
 
       try {
@@ -912,37 +850,45 @@
           data.choices?.[0]?.message?.content?.trim() ||
           "Heute blieb alles still, die Fairy konnte nicht geladen werden.";
 
-        const parts = validateAndBuildParts(text, motifObj, verb);
+        const result = validateAndBuildStory(text, motifObj);
 
-        if ((!parts || storyAlreadySeen(text)) && retryCount < 3) {
+        // Im Fehlerfall oder bei Wiederholung: bis zu 3 Versuche
+        if ((!result || storyAlreadySeen(text)) && retryCount < 3) {
           return await generateFairyFromOpenAI(retryCount + 1);
         }
 
-        if (!parts && retryCount >= 3) {
-          // Fallback – ganz einfache Not-Fabel, aber regelkonform
-          const pronoun = pronounByArticle[motifObj.article] || "es";
-          const fallbackS1 =
-            "Am Spielfeldrand wartete etwas Ungeduldiges darauf, endlich ins Geschehen zu kippen.";
-          const fallbackS2 =
-            "\"Jetzt bin ich an der Reihe\", " +
-            verb +
-            " " +
-            pronoun;
-          const fallbackMotif = motifObj.noun.toUpperCase();
-          currentParts = [fallbackS1, fallbackS2, fallbackMotif];
+        if (!result && retryCount >= 3) {
+          // Fallback – einfache Not-Fabel
+          const fallbackStory =
+            "Am Spielfeldrand wartete etwas Ungeduldiges darauf, endlich ins Geschehen zu kippen.\n\n" +
+            "Niemand wusste, dass es längst seinen eigenen Moment vorbereitete.";
+          currentStoryText = fallbackStory;
+          currentMotifDisplay = motifObj.noun.toUpperCase();
           currentFairyOwnedByThisDevice = true;
-          rememberStory(fallbackS1 + " " + fallbackS2);
-          showStoryPart(0);
+
+          storyTextEl.classList.remove("story-muted");
+          storyTextEl.classList.remove("motif-big");
+          storyTextEl.style.whiteSpace = "normal";
+          storyTextEl.textContent = currentStoryText;
+          revealMotifBtn.classList.remove("hidden");
+          sentenceIndicator.textContent = "";
           setFairyStatus("Neue Fabel ist aktiv (Fallback).");
+          rememberStory(fallbackStory);
           return;
         }
 
-        currentParts = parts;
-        currentPartIndex = 0;
+        currentStoryText = result.storyText;
+        currentMotifDisplay = result.motifDisplay;
         currentFairyOwnedByThisDevice = true;
 
         rememberStory(text);
-        showStoryPart(0);
+
+        storyTextEl.classList.remove("story-muted");
+        storyTextEl.classList.remove("motif-big");
+        storyTextEl.style.whiteSpace = "normal";
+        storyTextEl.textContent = currentStoryText;
+        revealMotifBtn.classList.remove("hidden");
+        sentenceIndicator.textContent = "";
         setFairyStatus("Neue Fabel ist aktiv.");
       } catch (err) {
         console.error(err);
@@ -963,18 +909,27 @@
       await generateFairyFromOpenAI();
     });
 
-    nextPartBtn.addEventListener("click", () => {
-      if (!currentParts || currentParts.length === 0) return;
-      const nextIndex = currentPartIndex + 1;
-      if (nextIndex < currentParts.length) {
-        showStoryPart(nextIndex);
+    revealMotifBtn.addEventListener("click", () => {
+      if (!currentMotifDisplay) return;
+
+      storyTextEl.classList.remove("story-muted");
+      storyTextEl.classList.add("motif-big");
+      storyTextEl.textContent = currentMotifDisplay;
+
+      // Standard: kein Umbruch, außer beim Schmetterling
+      if (
+        currentMotif &&
+        currentMotif.noun &&
+        currentMotif.noun.toLowerCase() === "schmetterling"
+      ) {
+        storyTextEl.style.whiteSpace = "normal";
       } else {
-        nextPartBtn.classList.add("hidden");
+        storyTextEl.style.whiteSpace = "nowrap";
       }
     });
 
     fairyFundBtn.addEventListener("click", () => {
-      if (!currentParts || currentParts.length === 0) {
+      if (!currentStoryText && !currentMotifDisplay) {
         setFairyStatus(
           "Erst eine Fabel starten, dann kannst du FAIRY FUND nutzen.",
           true
@@ -994,15 +949,16 @@
 
       currentMotif = null;
       currentVerb = null;
-      currentParts = [];
-      currentPartIndex = 0;
+      currentStoryText = "";
+      currentMotifDisplay = "";
       currentFairyOwnedByThisDevice = false;
 
       storyTextEl.textContent =
         "Fabel verbraucht. Starte die nächste mit einem Tipp auf FAIRY.";
       storyTextEl.classList.add("story-muted");
       storyTextEl.classList.remove("motif-big");
-      nextPartBtn.classList.add("hidden");
+      storyTextEl.style.whiteSpace = "normal";
+      revealMotifBtn.classList.add("hidden");
       sentenceIndicator.textContent = "";
       setFairyStatus("");
 
@@ -1043,7 +999,7 @@
       initUnusedMotifs();
       updateScoreDisplay();
       updateFairyCountDisplay();
-      updateSentenceIndicator();
+      sentenceIndicator.textContent = "";
     }
 
     init();
