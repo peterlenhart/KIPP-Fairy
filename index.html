@@ -5,7 +5,7 @@
   <title>FAIRY KIPP</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Google Fonts: verspieltes FAIRY + technisches KIPP -->
+  <!-- Google Fonts -->
   <link
     href="https://fonts.googleapis.com/css2?family=Pacifico&family=Montserrat:wght@500;700&display=swap"
     rel="stylesheet"
@@ -552,7 +552,12 @@
     let lastStories = [];
     let unusedMotifs = [];
 
-    // --- Storage & Init ---
+    // ---------- Helper: Regex escapen ----------
+    function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&");
+    }
+
+    // ---------- Storage & Init ----------
     function loadApiKeyFromStorage() {
       const stored = window.localStorage.getItem(APIKEY_STORAGE_KEY);
       if (stored && stored.startsWith("sk-")) {
@@ -604,7 +609,6 @@
         return;
       }
 
-      // 3 Schritte: Satz1, Satz2, Motiv
       if (currentParts.length === 3) {
         if (currentPartIndex === 0) {
           sentenceIndicator.textContent = "Satz 1 von 2";
@@ -616,7 +620,6 @@
         return;
       }
 
-      // Fallback (1 oder 2 Teile)
       sentenceIndicator.textContent =
         "Satz " + (currentPartIndex + 1) + " von " + currentParts.length;
     }
@@ -670,13 +673,10 @@
 
       if (currentParts.length === 3) {
         if (index === 0) {
-          // Satz 1
           storyTextEl.textContent = text;
         } else if (index === 1) {
-          // Satz 2 komplett, letzte zwei hervorgehoben
           storyTextEl.innerHTML = highlightLastTwoWords(text);
         } else {
-          // Nur letzte zwei Wörter (Motiv) groß
           storyTextEl.innerHTML = highlightLastTwoWords(text);
         }
       } else if (currentParts.length === 2 && index === 1) {
@@ -705,7 +705,6 @@
         return [sentences[0], sentences[1], lastTwoSentence];
       }
 
-      // Fallback
       return [text];
     }
 
@@ -763,7 +762,7 @@
       endOverlay.style.display = "none";
     }
 
-    // --- Validierung für Motiv ---
+    // ---------- Validierung ----------
     function validateStoryForMotif(text, motif) {
       const sentences = text
         .split(/(?<=[.!?])\s+/)
@@ -773,17 +772,20 @@
       if (sentences.length !== 2) return false;
 
       const second = sentences[1];
-      const lastMatch = second.match(/([A-Za-zÄÖÜäöüß\-]+)[.!?"]*\s*$/);
-      if (!lastMatch) return false;
-      const lastWord = lastMatch[1];
 
-      if (lastWord.toLowerCase() !== motif.toLowerCase()) return false;
-
+      // Motiv nur einmal im ganzen Text
       const lower = text.toLowerCase();
-      const re = new RegExp("\\b" + motif.toLowerCase() + "\\b", "g");
+      const motifRe = new RegExp("\\b" + escapeRegex(motif.toLowerCase()) + "\\b", "g");
       let count = 0;
-      while (re.exec(lower)) count++;
+      while (motifRe.exec(lower)) count++;
       if (count !== 1) return false;
+
+      // Muster: ", VERB der/die/das MOTIV."
+      const motifEsc = escapeRegex(motif);
+      const pattern =
+        '",\\s*([A-Za-zÄÖÜäöüß]+)\\s+(der|die|das)\\s+' + motifEsc + '[.!?"]*\\s*$';
+      const re = new RegExp(pattern, "i");
+      if (!re.test(second)) return false;
 
       return true;
     }
@@ -796,6 +798,7 @@
       return first + " " + second;
     }
 
+    // ---------- OpenAI ----------
     async function generateFairyFromOpenAI(retryCount = 0) {
       if (!apiKey) {
         setFairyStatus("Bitte zuerst API-Key oben eingeben.", true);
@@ -830,16 +833,15 @@
           "Struktur:\n" +
           "- Satz 1: neutrale Beobachtungsszene in der dritten Person, keine Personifikation, enthält das Motivwort nicht und keine Ableitung davon.\n" +
           "- Satz 2: besteht IMMER aus direkter Rede, gefolgt von einem Redebegleitsatz.\n" +
-          "  Die Struktur von Satz 2 ist IMMER: \"<Direkte Rede>\", <lautliches Verb> <bestimmter Artikel> <Motiv>.\n" +
+          "  Die Struktur von Satz 2 ist IMMER: \"<Direkte Rede>\", <lautliches Verb> der/die/das <Motiv>.\n" +
           "Vorgaben zum Motivwort:\n" +
           "- Das Motivwort kommt im gesamten Text nur EINMAL vor.\n" +
           "- Es steht IMMER als letztes Wort des zweiten Satzes.\n" +
           "- Direkt vor dem Motivwort steht ein bestimmter Artikel (der/die/das).\n" +
-          "Erklärungen zum Redebegleitsatz:\n" +
-          "- Das Verb im Redebegleitsatz muss ein lautliches Verb sein, das eine Äußerung oder ein Geräusch ausdrückt.\n" +
-          "- Erlaubte Beispiele: brummte, blubberte, plätscherte, raschelte, murmelte, flüsterte, knatterte, gluckerte, schnaufte, wisperte, klirrte.\n" +
-          "- Du darfst ähnliche lautliche Verben verwenden, aber KEINE reinen Bewegungsverben ohne Geräusch (z.B. flatterte, strampelte, wackelte, glänzte, vibrierte).\n" +
-          "- Schreibe in einem schlichten, fabelartigen Stil, ohne Märchensprache und ohne Kitsch."
+          "Redebegleitsatz:\n" +
+          "- Das Verb muss ein lautliches Verb sein, z.B.: brummte, blubberte, plätscherte, raschelte, murmelte, flüsterte, knatterte, gluckerte, schnaufte, wisperte, klirrte.\n" +
+          "- Keine Pronomen wie 'er', 'sie', 'es' oder zusätzliche Verben/Objekte nach dem Motiv.\n" +
+          "- Atmosphäre schlicht und fabelartig, ohne Märchensprache und ohne Kitsch."
       };
 
       const userMessage = {
@@ -907,7 +909,7 @@
       }
     }
 
-    // --- Events ---
+    // ---------- Events ----------
     fairyBtn.addEventListener("click", async () => {
       await generateFairyFromOpenAI();
     });
